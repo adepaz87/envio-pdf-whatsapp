@@ -7,6 +7,7 @@ Variables (Railway): TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WA_NUMBER,
 INFORME_PDF_TOKEN. Opcional: DESTINO (por defecto +34690875940).
 
 POST /enviar        cabecera X-Api-Token; JSON {"pdf_base64": "...", "nombre": "x.pdf"}
+POST /enviar-texto  cabecera X-Api-Token; JSON {"texto": "..."}  (aviso de OT nuevas)
 GET  /estado/<sid>  cabecera X-Api-Token; estado de entrega en Twilio
 GET  /pdf/<clave>/<nombre>  sirve el PDF a Twilio (clave aleatoria)
 GET  /health
@@ -96,3 +97,24 @@ def servir(clave, nombre):
         return 'No encontrado', 404
     return Response(item[2], mimetype='application/pdf',
                     headers={'Content-Disposition': f'inline; filename="{item[1]}"'})
+
+
+@app.post('/enviar-texto')
+def enviar_texto():
+    """Añadido para el aviso de OT nuevas: manda un mensaje de texto (sin PDF)."""
+    err = _auth()
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+    texto = str(data.get('texto') or '').strip()
+    if not texto:
+        return {'error': 'falta texto'}, 400
+    destino = os.environ.get('DESTINO', '+34690875940')
+    try:
+        msg = _twilio().messages.create(
+            from_=os.environ.get('TWILIO_WA_NUMBER', ''),
+            to=f'whatsapp:{destino}',
+            body=texto[:1500])
+    except Exception as e:
+        return {'error': f'Twilio: {e}', 'code': getattr(e, 'code', None)}, 502
+    return {'status': str(msg.status), 'sid': msg.sid}, 200
